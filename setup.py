@@ -75,11 +75,11 @@ install_requires_core = [
     "jaxlib>=0.4.3",
     "flax>=0.4.0",
     "ml-collections>=0.1.1",
-    "tensorflow>=2.7",
+    "tensorflow-cpu>=2.7",
     "immutabledict>=2.2.1",
     "clu>=0.0.6",
     "tensorflow-datasets",
-    "optax @ git+https://github.com/google-deepmind/optax.git@main",
+    "optax",
 ]
 
 tests_require = [
