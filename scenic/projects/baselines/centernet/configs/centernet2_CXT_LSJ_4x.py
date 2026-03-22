@@ -18,6 +18,7 @@ r"""Default configs for COCO detection using CenterNet.
 """
 # pylint: enable=line-too-long
 
+import os
 import ml_collections
 
 
@@ -73,7 +74,7 @@ def get_config():
   config.optimizer.skip_scale_and_bias_regularization = True
 
   # Training.
-  config.batch_size = 64
+  config.batch_size = 32
   config.num_training_steps = 90000
   config.lr_configs = ml_collections.ConfigDict()
   config.lr_configs.learning_rate_schedule = 'compound'
@@ -83,7 +84,7 @@ def get_config():
   config.lr_configs.base_learning_rate = 0.0002
 
   # Pretrained_backbone.
-  config.weights = '/home/sm729_h2omeai_com/raw2srgb/scenic_checkpoints/convnext_tiny_in22k.ckpt'
+  config.weights = os.path.expanduser('~/h2omeai02-us-central2/scenic_checkpoints/convnext_tiny_in22k.ckpt')
   config.load_prefix = 'backbone/bottom_up/'
   config.checkpoint_steps = 5000
   config.log_eval_steps = 2500
