@@ -83,7 +83,7 @@ def get_config():
   config.lr_configs.base_learning_rate = 0.0002
 
   # Pretrained_backbone.
-  config.weights = '/path/to/convnext_tiny_in22k/'
+  config.weights = '/home/sm729_h2omeai_com/raw2srgb/scenic_checkpoints/convnext_tiny_in22k.ckpt'
   config.load_prefix = 'backbone/bottom_up/'
   config.checkpoint_steps = 5000
   config.log_eval_steps = 2500

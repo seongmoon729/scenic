@@ -24,7 +24,7 @@ import os
 from typing import Any, Dict, Optional
 from absl import logging
 
-import lvis
+# import lvis
 import numpy as np
 from pycocotools import cocoeval
 from scenic.dataset_lib.coco_dataset import coco_eval as coco_eval_wrapper
