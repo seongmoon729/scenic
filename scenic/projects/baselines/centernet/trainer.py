@@ -37,6 +37,8 @@ from scenic.projects.baselines.centernet import train_utils as centernet_train_u
 from scenic.projects.baselines.centernet.modeling import centernet2
 from scenic.train_lib import train_utils
 
+import wandb
+
 
 def train_step(
     train_state,
@@ -135,6 +137,10 @@ def train_and_evaluate(
       regression testing.
   """
   is_host = jax.process_index() == 0
+
+  if is_host:
+    run = wandb.init(project=config.experiment_name, config=config.to_dict())
+    workdir = f'{workdir}_{run.id}'
 
   # Initialize model class (without parameters)
   model = model_cls(config, dataset.meta_data)
@@ -241,6 +247,12 @@ def train_and_evaluate(
           extra_training_logs=jax.tree_util.tree_map(
               train_utils.unreplicate_and_get, extra_training_logs),
           writer=writer)
+      if is_host:
+        run.log(
+          step=step,
+          data=train_summary,
+          commit=(step % log_eval_steps != 0),
+      )
       train_metrics, extra_training_logs = [], []
 
     # Run evaluation
@@ -256,11 +268,17 @@ def train_and_evaluate(
             save_dir=workdir,
             config=config)
         last_eval_step = step
-        train_utils.log_eval_summary(
+        eval_summary = train_utils.log_eval_summary(
             step=last_eval_step, eval_metrics=last_eval_metrics,
             extra_eval_summary=last_eval_results, writer=writer)
       duration = time.time() - start_time
       logging.info('Done with evaluation: %.4f sec.', duration)
+      if is_host:
+        run.log(
+          step=step,
+          data=eval_summary,
+          commit=True,
+        )
       writer.flush()
 
     # Handle checkpointing
