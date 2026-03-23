@@ -245,8 +245,8 @@ def coco_load_split_from_tfds(
   """
   split = 'train' if train else 'validation'
 
-  if dataset_path == 'coco/2017':
-    builder = tfds.builder('coco/2017')
+  if dataset_path in ['coco/2017', 'nod/nikon_rgb', 'nod/nikon_raw', 'nod/sony_rgb', 'nod/sony_raw']:
+    builder = tfds.builder(dataset_path)
     # Each host is responsible for a fixed subset of data.
     data_range = tfds.even_splits(
         split, jax.process_count())[jax.process_index()]
@@ -426,11 +426,11 @@ def dataset_builder(*,
       'num_classes', train_ds_info.get('num_classes', 1))
   num_train_examples = dataset_configs.get(
       'num_train_examples',
-      dataset_utils.get_num_examples('coco/2017', 'train'))
+      dataset_utils.get_num_examples(train_data_path, 'train'))
   num_eval_examples = dataset_configs.get(
       'num_eval_examples',
-      dataset_utils.get_num_examples('coco/2017', 'validation'))
-  label_to_name = coco_utils.get_label_map('coco/2017_panoptic')
+      dataset_utils.get_num_examples(test_data_path, 'validation'))
+  # label_to_name = coco_utils.get_label_map('coco/2017_panoptic')
 
   meta_data = {
       'num_classes': num_classes,
@@ -439,7 +439,7 @@ def dataset_builder(*,
       'num_eval_examples': num_eval_examples,
       'input_dtype': jnp.float32,
       'target_is_onehot': False,
-      'label_to_name': label_to_name,
+      # 'label_to_name': label_to_name,
   }
   return dataset_utils.Dataset(train_iter, eval_iter, None, meta_data)
 
