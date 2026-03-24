@@ -32,7 +32,7 @@ def get_config():
   config.dataset_configs = ml_collections.ConfigDict()
   config.dataset_configs.train_data_path = 'nod/nikon_rgb:2.0.0' # ❗️❗️❗️❗️
   config.dataset_configs.test_data_path = 'nod/nikon_rgb:2.0.0' # ❗️❗️❗️❗️
-  config.dataset_configs.test_annotation_path = 'annotations/raw_new_Nikon750_test.json' # ❗️❗️❗️❗️
+  config.dataset_configs.test_annotation_path = 'annotations/raw_new_Nikon750_test_ds_h400.json' # ❗️❗️❗️❗️
   config.dataset_configs.prefetch_to_device = 2
   config.dataset_configs.shuffle_buffer_size = 10_000
   config.dataset_configs.max_boxes = 100
