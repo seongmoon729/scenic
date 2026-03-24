@@ -441,7 +441,7 @@ def dataset_builder(*,
 
   meta_data = {
       'num_classes': num_classes,
-      'input_shape': [-1, crop_size, crop_size, 3],
+      'input_shape': [-1, crop_size, crop_size, num_channels],
       'num_train_examples': num_train_examples,
       'num_eval_examples': num_eval_examples,
       'input_dtype': jnp.float32,
