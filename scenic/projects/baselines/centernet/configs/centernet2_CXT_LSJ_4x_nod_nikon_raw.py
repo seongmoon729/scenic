@@ -30,8 +30,8 @@ def get_config():
   # Dataset.
   config.dataset_name = 'coco_centernet_detection'
   config.dataset_configs = ml_collections.ConfigDict()
-  config.dataset_configs.train_data_path = 'nod/nikon_raw' # ❗️❗️❗️❗️
-  config.dataset_configs.test_data_path = 'nod/nikon_raw' # ❗️❗️❗️❗️
+  config.dataset_configs.train_data_path = 'nod/nikon_raw:2.0.0' # ❗️❗️❗️❗️
+  config.dataset_configs.test_data_path = 'nod/nikon_raw:2.0.0' # ❗️❗️❗️❗️
   config.dataset_configs.test_annotation_path = 'annotations/raw_new_Nikon750_test.json' # ❗️❗️❗️❗️
   config.dataset_configs.prefetch_to_device = 2
   config.dataset_configs.shuffle_buffer_size = 10_000

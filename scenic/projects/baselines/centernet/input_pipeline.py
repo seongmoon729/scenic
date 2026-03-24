@@ -247,7 +247,9 @@ def coco_load_split_from_tfds(
   """
   split = 'train' if train else 'validation'
 
-  if dataset_path in ['coco/2017', 'nod/nikon_rgb', 'nod/nikon_raw', 'nod/sony_rgb', 'nod/sony_raw']:
+  candidates = ['coco/2017', 'nod/nikon_rgb', 'nod/nikon_raw', 'nod/sony_rgb', 'nod/sony_raw', 'nod/nikon_rgb:2.0.0', 'nod/nikon_raw:2.0.0']
+
+  if dataset_path in candidates:
     builder = tfds.builder(dataset_path)
     # Each host is responsible for a fixed subset of data.
     data_range = tfds.even_splits(
