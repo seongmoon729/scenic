@@ -219,7 +219,9 @@ def coco_load_split_from_tfds(
     remove_crowd=True,
     with_masks=False,
     shuffle_buffer_size=1000,
-    shuffle_seed=0):
+    shuffle_seed=0,
+    num_channels=3,
+    ):
   """Loads a split from the COCO dataset using TensorFlow Datasets.
 
   Args:
@@ -279,7 +281,7 @@ def coco_load_split_from_tfds(
     ds = ds.cache()
 
   padded_shapes = {
-      'inputs': [max_size, max_size, 3],
+      'inputs': [max_size, max_size, num_channels],
       'padding_mask': [max_size, max_size],
       'label': {
           'area': [max_boxes,],
@@ -358,6 +360,7 @@ def dataset_builder(*,
   train_data_path = dataset_configs.get('train_data_path', 'coco/2017')
   test_data_path = dataset_configs.get('test_data_path', 'coco/2017')
   with_masks = dataset_configs.get('with_masks', False)
+  num_channels = dataset_configs.get('num_channels', 3)
 
   assert model_input_format in ['RGB', 'BGR'], model_input_format
   crop_size = ((crop_size - 1) // size_divisibility + 1) * size_divisibility
@@ -381,7 +384,8 @@ def dataset_builder(*,
       max_boxes=max_boxes,
       remove_crowd=remove_crowd,
       with_masks=with_masks,
-      shuffle_seed=shuffle_seed)
+      shuffle_seed=shuffle_seed,
+      num_channels=num_channels)
 
   if dataset_service_address:
     if shuffle_seed is not None:
@@ -400,7 +404,8 @@ def dataset_builder(*,
       max_boxes=max_boxes,
       decode_fn=decode_fn,
       with_masks=with_masks,
-      dataset_path=test_data_path)
+      dataset_path=test_data_path,
+      num_channels=num_channels)
 
   maybe_pad_batches_train = functools.partial(
       dataset_utils.maybe_pad_batch, train=True, batch_size=batch_size)

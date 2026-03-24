@@ -40,6 +40,7 @@ def get_config():
   config.dataset_configs.crop_size = 1024
   config.dataset_configs.size_divisibility = 32
   config.dataset_configs.remove_crowd = True
+  config.dataset_configs.num_channels = 4
   config.data_dtype_str = 'float32'
 
   config.rng_seed = 0
