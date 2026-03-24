@@ -77,8 +77,8 @@ class CenterNetDetector(nn.Module):
   sqrt_score: bool = False
   # pixel_mean: Any = IMAGENET_PIXEL_MEAN
   # pixel_std: Any = IMAGENET_PIXEL_STD
-  pixel_max_val: float = 255.0
-  pixel_min_val: float = 0.0
+  pixel_max_val: int = 255
+  pixel_min_val: int = 0
   sync_device_norm: bool = True
   dtype: jnp.dtype = jnp.float32
   vitdet_scale_factors: Any = (2.0, 1.0, 0.5)
