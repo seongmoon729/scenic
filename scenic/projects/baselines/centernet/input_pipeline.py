@@ -247,37 +247,37 @@ def coco_load_split_from_tfds(
   """
   split = 'train' if train else 'validation'
 
-  candidates = ['coco/2017', 'nod/nikon_rgb', 'nod/nikon_raw', 'nod/sony_rgb', 'nod/sony_raw', 'nod/nikon_rgb:2.0.0', 'nod/nikon_raw:2.0.0']
+  # candidates = ['coco/2017', 'nod/nikon_rgb', 'nod/nikon_raw', 'nod/sony_rgb', 'nod/sony_raw', 'nod/nikon_rgb:2.0.0', 'nod/nikon_raw:2.0.0']
 
-  if dataset_path in candidates:
-    builder = tfds.builder(dataset_path)
-    # Each host is responsible for a fixed subset of data.
-    data_range = tfds.even_splits(
-        split, jax.process_count())[jax.process_index()]
-    ds = builder.as_dataset(split=data_range, shuffle_files=False)
-    ds_info = {
-        'num_classes': builder.info.features['objects']['label'].num_classes}
-    class_id_base = 0
-    metadata = builder.info.metadata
-    if metadata is not None:
-      ds_info.update(
-        pixel_min_val=metadata['image']['min'],
-        pixel_max_val=metadata['image']['max'],
-        test_annotation_path=metadata.get('test_annotation_path', None),
-      )
-  else:
-    feature_description = coco_feature_description
-    end = ''
-    decode_example_fn = lambda x: coco_decode_example(x, with_masks)
-    class_id_base = 0
-    ds = tf.data.TFRecordDataset(decode_sharded_names(dataset_path, end=end))
-    # Split datasets into machines. Otherwise multi-machine evaluation takes the
-    # same images.
-    ds = ds.shard(jax.process_count(), jax.process_index())
-    ds = ds.map(
-        lambda x: tf.io.parse_single_example(x, feature_description))
-    ds = ds.map(decode_example_fn)
-    ds_info = {}
+  # if dataset_path in candidates:
+  builder = tfds.builder(dataset_path)
+  # Each host is responsible for a fixed subset of data.
+  data_range = tfds.even_splits(
+      split, jax.process_count())[jax.process_index()]
+  ds = builder.as_dataset(split=data_range, shuffle_files=False)
+  ds_info = {
+      'num_classes': builder.info.features['objects']['label'].num_classes}
+  class_id_base = 0
+  metadata = builder.info.metadata
+  if metadata is not None:
+    ds_info.update(
+      pixel_min_val=metadata['image']['min'],
+      pixel_max_val=metadata['image']['max'],
+      test_annotation_path=metadata.get('test_annotation_path', None),
+    )
+  # else:
+  #   feature_description = coco_feature_description
+  #   end = ''
+  #   decode_example_fn = lambda x: coco_decode_example(x, with_masks)
+  #   class_id_base = 0
+  #   ds = tf.data.TFRecordDataset(decode_sharded_names(dataset_path, end=end))
+  #   # Split datasets into machines. Otherwise multi-machine evaluation takes the
+  #   # same images.
+  #   ds = ds.shard(jax.process_count(), jax.process_index())
+  #   ds = ds.map(
+  #       lambda x: tf.io.parse_single_example(x, feature_description))
+  #   ds = ds.map(decode_example_fn)
+  #   ds_info = {}
   options = tf.data.Options()
   options.threading.private_threadpool_size = 48
   ds = ds.with_options(options)
