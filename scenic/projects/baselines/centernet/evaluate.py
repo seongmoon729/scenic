@@ -92,8 +92,9 @@ def inference_on_dataset(
   Returns:
     evaluation results.
   """
-  annotations_loc = config.get('dataset_configs', {}).get(
-      'test_annotation_path', None)
+  # annotations_loc = config.get('dataset_configs', {}).get(
+  #     'test_annotation_path', None)
+  annotations_loc = dataset.meta_data.get('test_annotation_path', None)
   eval_class_agnostic = config.get('eval_class_agnostic', False)
   eval_step_multiplier = config.get('eval_step_multiplier', 1.3)
   debug = config.get('debug_eval', False)

@@ -258,6 +258,13 @@ def coco_load_split_from_tfds(
     ds_info = {
         'num_classes': builder.info.features['objects']['label'].num_classes}
     class_id_base = 0
+    metadata = builder.info.metadata
+    if metadata is not None:
+      ds_info.update(
+        pixel_min_val=metadata['image']['min'],
+        pixel_max_val=metadata['image']['max'],
+        test_annotation_path=metadata.get('test_annotation_path', None),
+      )
   else:
     feature_description = coco_feature_description
     end = ''
@@ -447,6 +454,9 @@ def dataset_builder(*,
       'input_dtype': jnp.float32,
       'target_is_onehot': False,
       # 'label_to_name': label_to_name,
+      'pixel_min_val': dataset_configs.get('pixel_min_val', 0),
+      'pixel_max_val': dataset_configs.get('pixel_max_val', 255),
+      'test_annotation_path': dataset_configs.get('test_annotation_path', None),
   }
   return dataset_utils.Dataset(train_iter, eval_iter, None, meta_data)
 

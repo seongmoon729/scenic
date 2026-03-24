@@ -234,4 +234,7 @@ class CenterNet2Model(centernet.CenterNetModel):
     fields = set(x.name for x in dataclasses.fields(CenterNet2Detector))
     config_dict = {
         k: v for k, v in self.config.model.items() if k in fields}
+    config_dict.update({
+        k: v for k, v in self.dataset_meta_data.items() if k in fields
+    })
     return CenterNet2Detector(**config_dict)
