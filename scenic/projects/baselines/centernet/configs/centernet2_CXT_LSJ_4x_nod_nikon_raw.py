@@ -82,7 +82,8 @@ def get_config():
 
   # Training.
   config.batch_size = 32
-  config.num_training_steps = 90000
+  # config.num_training_steps = 90_000
+  config.num_training_steps = 30_000
   config.lr_configs = ml_collections.ConfigDict()
   config.lr_configs.learning_rate_schedule = 'compound'
   config.lr_configs.factors = 'constant * cosine_decay * linear_warmup'
