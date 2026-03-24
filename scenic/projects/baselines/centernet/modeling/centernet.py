@@ -529,6 +529,7 @@ class CenterNetDetector(nn.Module):
     # inputs = (inputs.astype(self.dtype) - mean) / std
     inputs = (inputs.astype(self.dtype) - self.pixel_min_val) / (
         self.pixel_max_val - self.pixel_min_val)
+    inputs = jnp.clip(inputs, 0., 1.)
     if padding_mask is not None:
       inputs = inputs * padding_mask[..., None]  # Padded pixels remain 0
     return inputs
