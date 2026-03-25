@@ -261,10 +261,19 @@ def coco_load_split_from_tfds(
   metadata = builder.info.metadata
   if metadata is not None:
     ds_info.update(
-      pixel_min_val=metadata['image']['min'],
-      pixel_max_val=metadata['image']['max'],
       test_annotation_path=metadata.get('test_annotation_path', None),
     )
+    pixel_min_val = metadata['image']['min']
+    pixel_max_val = metadata['image']['max']
+  else:
+    pixel_min_val = 0
+    pixel_max_val = 255
+
+  def decode_and_normalize(x):
+    x = decode_fn(x)
+    x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
+    x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
+    return x
   # else:
   #   feature_description = coco_feature_description
   #   end = ''
@@ -282,7 +291,7 @@ def coco_load_split_from_tfds(
   options.threading.private_threadpool_size = 48
   ds = ds.with_options(options)
   ds = ds.map(
-      lambda x: decode_fn(  # pylint: disable=g-long-lambda
+      lambda x: decode_and_normalize(  # pylint: disable=g-long-lambda
           x, remove_crowd=train and remove_crowd, class_id_base=class_id_base,
           with_masks=with_masks),
       num_parallel_calls=tf.data.experimental.AUTOTUNE)

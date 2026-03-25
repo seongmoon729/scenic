@@ -75,10 +75,6 @@ class CenterNetDetector(nn.Module):
   hm_weight: float = 1.
   reg_weight: float = 2.
   sqrt_score: bool = False
-  # pixel_mean: Any = IMAGENET_PIXEL_MEAN
-  # pixel_std: Any = IMAGENET_PIXEL_STD
-  pixel_max_val: int = 255
-  pixel_min_val: int = 0
   sync_device_norm: bool = True
   dtype: jnp.dtype = jnp.float32
   vitdet_scale_factors: Any = (2.0, 1.0, 0.5)
@@ -524,12 +520,7 @@ class CenterNetDetector(nn.Module):
 
   def preprocess(self, inputs, padding_mask=None):
     """Proprocess images. Normalize pixels for non-padded pixels."""
-    # mean = jnp.asarray(self.pixel_mean, dtype=self.dtype).reshape(1, 1, 1, 3)
-    # std = jnp.asarray(self.pixel_std, dtype=self.dtype).reshape(1, 1, 1, 3)
-    # inputs = (inputs.astype(self.dtype) - mean) / std
-    inputs = (inputs.astype(self.dtype) - self.pixel_min_val) / (
-        self.pixel_max_val - self.pixel_min_val)
-    inputs = jnp.clip(inputs, 0., 1.)
+    # Move `normalize` to dataset pipeline
     if padding_mask is not None:
       inputs = inputs * padding_mask[..., None]  # Padded pixels remain 0
     return inputs
