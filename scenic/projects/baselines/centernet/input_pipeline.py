@@ -269,8 +269,8 @@ def coco_load_split_from_tfds(
     pixel_min_val = 0
     pixel_max_val = 255
 
-  def decode_and_normalize(x):
-    x = decode_fn(x)
+  def decode_and_normalize(x, **kwargs):
+    x = decode_fn(x, **kwargs)
     x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
     x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
     return x
