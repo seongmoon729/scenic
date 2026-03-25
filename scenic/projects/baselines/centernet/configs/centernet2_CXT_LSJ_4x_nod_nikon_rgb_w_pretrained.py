@@ -86,6 +86,7 @@ def get_config():
   config.lr_configs.steps_per_cycle = config.num_training_steps
   config.lr_configs.warmup_steps = 500
   config.lr_configs.base_learning_rate = 0.0002
+  config.shuffle_seed = 42
 
   # Pretrained_backbone.
   config.weights = os.path.expanduser('~/h2omeai02-us-central2/scenic_checkpoints/convnext_tiny_in22k.ckpt')
