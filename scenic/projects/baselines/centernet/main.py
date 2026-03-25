@@ -27,6 +27,7 @@ from scenic.projects.baselines.centernet import input_pipeline
 from scenic.projects.baselines.centernet import trainer
 from scenic.projects.baselines.centernet.modeling import centernet
 from scenic.projects.baselines.centernet.modeling import centernet2
+from tensorflow.random import set_seed as tf_set_seed
 
 FLAGS = flags.FLAGS
 
@@ -44,6 +45,8 @@ def get_model_cls(model_name: str) -> Any:
 def main(rng: jnp.ndarray, config: ml_collections.ConfigDict, workdir: str,
          writer: metric_writers.MetricWriter):
   """Main function for the CenterNet project."""
+  tf_set_seed(config.shuffle_seed)
+
   model_cls = get_model_cls(config.model.model_name)
   data_rng, rng = jax.random.split(rng)
   dataset = input_pipeline.get_dataset(
