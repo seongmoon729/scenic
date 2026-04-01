@@ -282,10 +282,9 @@ def coco_load_split_from_tfds(
       return tf.reduce_any(mask)
     def remap_and_clean(example):
       labels = example['objects']['label']
-      bboxes = example['objects']['bbox']
       mask = tf.reduce_any(tf.equal(tf.expand_dims(labels, -1), target_labels), axis=-1)
-      example['objects']['label'] = tf.boolean_mask(labels, mask)
-      example['objects']['bbox'] = tf.boolean_mask(bboxes, mask)
+      for key in example['objects'].keys():
+        example['objects'][key] = tf.boolean_mask(example['objects'][key], mask)
       return example
 
     ds = ds.filter(filter_fn)
