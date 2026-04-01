@@ -259,7 +259,7 @@ def coco_load_split_from_tfds(
       'num_classes': builder.info.features['objects']['label'].num_classes}
   class_id_base = 0
   metadata = builder.info.metadata
-  if metadata is not None:
+  if len(metadata.keys()) > 0:
     ds_info.update(
       test_annotation_path=metadata.get('test_annotation_path', None),
     )
