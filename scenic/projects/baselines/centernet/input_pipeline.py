@@ -221,6 +221,7 @@ def coco_load_split_from_tfds(
     shuffle_buffer_size=1000,
     shuffle_seed=0,
     num_channels=3,
+    filter_labels=False,
     ):
   """Loads a split from the COCO dataset using TensorFlow Datasets.
 
@@ -269,27 +270,33 @@ def coco_load_split_from_tfds(
     pixel_min_val = 0
     pixel_max_val = 255
 
+  options = tf.data.Options()
+  options.threading.private_threadpool_size = 48
+  ds = ds.with_options(options)
+
+  if filter_labels:
+    target_labels = tf.constant([0, 1, 2], dtype=tf.int64) 
+    def filter_fn(example):
+      labels = example['objects']['label']
+      mask = tf.reduce_any(tf.equal(tf.expand_dims(labels, -1), target_labels), axis=-1)
+      return tf.reduce_any(mask)
+    def remap_and_clean(example):
+      labels = example['objects']['label']
+      bboxes = example['objects']['bbox']
+      mask = tf.reduce_any(tf.equal(tf.expand_dims(labels, -1), target_labels), axis=-1)
+      example['objects']['label'] = tf.boolean_mask(labels, mask)
+      example['objects']['bbox'] = tf.boolean_mask(bboxes, mask)
+      return example
+
+    ds = ds.filter(filter_fn)
+    ds = ds.map(remap_and_clean, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
   def decode_and_normalize(x, **kwargs):
     x = decode_fn(x, **kwargs)
     x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
     x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
     return x
-  # else:
-  #   feature_description = coco_feature_description
-  #   end = ''
-  #   decode_example_fn = lambda x: coco_decode_example(x, with_masks)
-  #   class_id_base = 0
-  #   ds = tf.data.TFRecordDataset(decode_sharded_names(dataset_path, end=end))
-  #   # Split datasets into machines. Otherwise multi-machine evaluation takes the
-  #   # same images.
-  #   ds = ds.shard(jax.process_count(), jax.process_index())
-  #   ds = ds.map(
-  #       lambda x: tf.io.parse_single_example(x, feature_description))
-  #   ds = ds.map(decode_example_fn)
-  #   ds_info = {}
-  options = tf.data.Options()
-  options.threading.private_threadpool_size = 48
-  ds = ds.with_options(options)
+
   ds = ds.map(
       lambda x: decode_and_normalize(  # pylint: disable=g-long-lambda
           x, remove_crowd=train and remove_crowd, class_id_base=class_id_base,
@@ -403,7 +410,10 @@ def dataset_builder(*,
       remove_crowd=remove_crowd,
       with_masks=with_masks,
       shuffle_seed=shuffle_seed,
-      num_channels=num_channels)
+      num_channels=num_channels,
+      cache=dataset_configs.get('cache', False),
+      filter_labels=dataset_configs.get('filter_labels', False),
+  )
 
   if dataset_service_address:
     if shuffle_seed is not None:

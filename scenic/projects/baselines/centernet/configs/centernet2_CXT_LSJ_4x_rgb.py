@@ -39,6 +39,8 @@ def get_config():
   config.dataset_configs.crop_size = 1024
   config.dataset_configs.size_divisibility = 32
   config.dataset_configs.remove_crowd = True
+  config.dataset_configs.cache = False
+  config.dataset_configs.filter_labels = False
   config.data_dtype_str = 'float32'
 
   config.rng_seed = 0
