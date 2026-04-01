@@ -398,7 +398,7 @@ def dataset_builder(*,
       decode_coco_detection_example, max_boxes=max_boxes,
       model_input_format=model_input_format)
 
-  train_ds, train_ds_info = coco_load_split_from_tfds(
+  train_ds, _ = coco_load_split_from_tfds(
       batch_size, train=True,
       preprocess_fn=train_preprocess_fn,
       decode_fn=decode_fn,
@@ -423,7 +423,7 @@ def dataset_builder(*,
     logging.info('Using the tf.data service at %s', dataset_service_address)
     train_ds = dataset_utils.distribute(train_ds, dataset_service_address)
 
-  eval_ds, _ = coco_load_split_from_tfds(
+  eval_ds, ds_info = coco_load_split_from_tfds(
       eval_batch_size,
       train=False,
       preprocess_fn=eval_preprocess_fn,
@@ -455,7 +455,7 @@ def dataset_builder(*,
   eval_iter = map(shard_batches, eval_iter)
 
   num_classes = dataset_configs.get(
-      'num_classes', train_ds_info.get('num_classes', 1))
+      'num_classes', ds_info.get('num_classes', 1))
   num_train_examples = dataset_configs.get(
       'num_train_examples',
       dataset_utils.get_num_examples(train_data_path, 'train'))
@@ -472,9 +472,7 @@ def dataset_builder(*,
       'input_dtype': jnp.float32,
       'target_is_onehot': False,
       # 'label_to_name': label_to_name,
-      'pixel_min_val': train_ds_info.get('pixel_min_val', 0),
-      'pixel_max_val': train_ds_info.get('pixel_max_val', 255),
-      'test_annotation_path': train_ds_info.get('test_annotation_path', None),
+      'test_annotation_path': ds_info.get('test_annotation_path', None),
   }
   return dataset_utils.Dataset(train_iter, eval_iter, None, meta_data)
 
