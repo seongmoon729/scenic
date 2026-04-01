@@ -100,4 +100,6 @@ def get_config():
   config.debug_train = False  # Debug mode during training.
   config.debug_eval = False  # Debug mode during eval.
 
+  config.wandb_tags = []
+
   return config
