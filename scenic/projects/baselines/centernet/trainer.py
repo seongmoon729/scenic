@@ -139,7 +139,10 @@ def train_and_evaluate(
   is_host = jax.process_index() == 0
 
   if is_host:
-    run = wandb.init(project=config.experiment_name, config=config.to_dict(), tags=[config.rawdiffusion_name])
+    tags = []
+    if config.get('rawdiffusion_name'):
+      tags.append(config.rawdiffusion_name)
+    run = wandb.init(project=config.experiment_name, config=config.to_dict(), tags=tags)
     workdir = f'{workdir}_{run.id}'
 
   # Initialize model class (without parameters)
@@ -252,7 +255,7 @@ def train_and_evaluate(
           step=step,
           data=train_summary,
           commit=(step % log_eval_steps != 0),
-      )
+        )
       train_metrics, extra_training_logs = [], []
 
     # Run evaluation
