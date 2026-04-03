@@ -18,7 +18,6 @@ r"""Default configs for COCO detection using CenterNet.
 """
 # pylint: enable=line-too-long
 
-import os
 import ml_collections
 
 
@@ -85,7 +84,6 @@ def get_config():
   config.shuffle_seed = 42
 
   # Pretrained_backbone.
-  config.weights = os.path.expanduser('~/h2omeai02-us-central2/scenic_checkpoints/convnext_tiny_in22k.ckpt')
   config.load_prefix = 'backbone/bottom_up/'
   config.checkpoint_steps = 5000
   config.log_eval_steps = 2500

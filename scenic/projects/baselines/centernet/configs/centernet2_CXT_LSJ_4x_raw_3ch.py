@@ -18,20 +18,12 @@ r"""Default configs for COCO detection using CenterNet.
 """
 # pylint: enable=line-too-long
 
-from scenic.projects.baselines.centernet.configs.centernet2_CXT_LSJ_4x import get_config as get_base_config
+from scenic.projects.baselines.centernet.configs.centernet2_CXT_LSJ_4x_raw import get_config as get_base_config
 
 
 def get_config():
   """get config."""
   config = get_base_config()
-
-  config.model.roi_num_classes = 3
-  config.dataset_configs.train_data_path = 'rgb_od/nod_nikon'
-  config.dataset_configs.test_data_path = 'rgb_od/nod_nikon'
-
-  config.dataset_configs.cache = False
-  config.dataset_configs.filter_labels = False
-
-  config.num_training_steps = 30_000
+  config.dataset_configs.num_channels = 3
 
   return config
