@@ -26,3 +26,5 @@ def get_config():
   """get config."""
   config = get_base_config()
   config.weights = f'gs://{os.environ["GCS_BUCKET_NAME"]}/scenic_checkpoints/convnext_tiny_in22k.ckpt'
+
+  return config
