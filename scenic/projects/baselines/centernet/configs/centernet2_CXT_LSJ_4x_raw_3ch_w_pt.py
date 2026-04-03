@@ -26,6 +26,6 @@ def get_config():
   """get config."""
   config = get_base_config()
   config.weights = f'gs://{os.environ["GCS_BUCKET_NAME"]}/scenic_checkpoints/convnext_tiny_in22k.ckpt'
-  config.lr_configs.base_learning_rate = 0.0001
+  config.lr_configs.base_learning_rate = 5e-5
 
   return config
