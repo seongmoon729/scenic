@@ -27,6 +27,6 @@ def get_config():
   config.dataset_configs.num_channels = 4
   config.dataset_configs.train_data_path = 'raw_od/nod_nikon'
   config.dataset_configs.test_data_path = 'raw_od/nod_nikon'
-  config.rawdiffusion_name = 'decent-universe-72'
+  config.rawdiffusion_name = ''
 
   return config
