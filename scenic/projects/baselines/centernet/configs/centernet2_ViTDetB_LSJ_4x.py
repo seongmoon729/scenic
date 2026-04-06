@@ -83,16 +83,17 @@ def get_config():
   config.lr_configs.decay_events = [80000, 87500]
   config.lr_configs.decay_factors = [0.1, 0.01]
   config.lr_configs.warmup_steps = 250
-  config.lr_configs.base_learning_rate = 0.0001
+  config.lr_configs.base_learning_rate = 0.0002
+  config.shuffle_seed = 42
 
   # Pretrained_backbone.
-  config.weights = '/path/to/mae_pretrain_vit_base/'
+  config.weights = ''
   config.load_prefix = 'backbone/net/'
   config.checkpoint_steps = 500
   config.log_eval_steps = 2500
 
   # Training.
-  config.batch_size = 64
+  config.batch_size = 8
 
   # Logging.
   config.write_summary = True
