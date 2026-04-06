@@ -74,7 +74,7 @@ def get_config():
 
   # Training.
   config.batch_size = 32
-  config.num_training_steps = 90000
+  config.num_training_steps = 90_000
   config.lr_configs = ml_collections.ConfigDict()
   config.lr_configs.learning_rate_schedule = 'compound'
   config.lr_configs.factors = 'constant * cosine_decay * linear_warmup'
@@ -95,5 +95,7 @@ def get_config():
   config.log_large_summary_steps = 1000  # Expensive summary operations freq
   config.debug_train = False  # Debug mode during training.
   config.debug_eval = False  # Debug mode during eval.
+
+  config.eval_only = False
 
   return config
