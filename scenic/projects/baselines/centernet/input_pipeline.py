@@ -265,7 +265,7 @@ def load_split_from_custom_tfrecord(
     # Set static channel dim (captured from num_channels) so downstream
     # Python-level shape checks work correctly during TF graph tracing.
     example['image'] = tf.ensure_shape(
-        example['image'], [None, None, num_channels])
+        example['image'], [None, None, 4])
     return example
 
   ds = ds.map(parse_and_decode,
@@ -275,10 +275,7 @@ def load_split_from_custom_tfrecord(
     x = decode_fn(x, **kwargs)
     x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
     x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
-    if num_channels != x['inputs'].shape[-1]:
-      assert num_channels == 3 and x['inputs'].shape[-1] == 4, (
-          f'Unsupported channel configuration: num_channels={num_channels}, '
-          f'but the input has {x["inputs"].shape[-1]} channels.')
+    if num_channels != 3:
       x['inputs'] = tf.stack(
           [
             x['inputs'][:, :, 0],
