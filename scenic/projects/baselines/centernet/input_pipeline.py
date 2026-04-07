@@ -261,7 +261,12 @@ def load_split_from_custom_tfrecord(
   def parse_and_decode(serialized):
     data = tf.io.parse_single_example(
         serialized, custom_tfrecord_feature_description)
-    return custom_tfrecord_decode_example(data)
+    example = custom_tfrecord_decode_example(data)
+    # Set static channel dim (captured from num_channels) so downstream
+    # Python-level shape checks work correctly during TF graph tracing.
+    example['image'] = tf.ensure_shape(
+        example['image'], [None, None, num_channels])
+    return example
 
   ds = ds.map(parse_and_decode,
               num_parallel_calls=tf.data.experimental.AUTOTUNE)
