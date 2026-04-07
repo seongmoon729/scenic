@@ -28,5 +28,7 @@ def get_config():
   config.dataset_configs.train_data_path = 'raw_od/nod_nikon'
   config.dataset_configs.test_data_path = 'raw_od/nod_nikon'
   config.rawdiffusion_name = ''
+  config.dataset_configs.pixel_min_val = 0
+  config.dataset_configs.pixel_max_val = 2**14 - 1
 
   return config
