@@ -270,6 +270,17 @@ def load_split_from_custom_tfrecord(
     x = decode_fn(x, **kwargs)
     x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
     x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
+    if num_channels != x['inputs'].shape[-1]:
+      assert num_channels == 3 and x['inputs'].shape[-1] == 4, (
+          f'Unsupported channel configuration: num_channels={num_channels}, '
+          f'but the input has {x["inputs"].shape[-1]} channels.')
+      x['inputs'] = tf.stack(
+          [
+            x['inputs'][:, :, 0],
+            (x['inputs'][:, :, 1] + x['inputs'][:, :, 2]) / 2.0,
+            x['inputs'][:, :, 3],
+          ], axis=-1
+      )
     return x
 
   ds = ds.map(
