@@ -275,7 +275,7 @@ def load_split_from_custom_tfrecord(
     x = decode_fn(x, **kwargs)
     x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
     x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
-    if num_channels != 3:
+    if num_channels == 3:
       x['inputs'] = tf.stack(
           [
             x['inputs'][:, :, 0],
