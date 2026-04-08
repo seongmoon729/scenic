@@ -533,6 +533,8 @@ class CenterNetModel(base_model.BaseModel):
     fields = set(x.name for x in dataclasses.fields(CenterNetDetector))
     config_dict = {
         k: v for k, v in self.config.model.items() if k in fields}
+    config_dict['dtype'] = getattr(
+        jnp, self.config.model.get('model_dtype_str', 'float32'))
     return CenterNetDetector(**config_dict)
 
   def loss_function(self, outputs, batch):

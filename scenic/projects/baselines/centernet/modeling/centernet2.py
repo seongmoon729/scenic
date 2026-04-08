@@ -237,4 +237,6 @@ class CenterNet2Model(centernet.CenterNetModel):
     config_dict.update({
         k: v for k, v in self.dataset_meta_data.items() if k in fields
     })
+    config_dict['dtype'] = getattr(
+        jnp, self.config.model.get('model_dtype_str', 'float32'))
     return CenterNet2Detector(**config_dict)
