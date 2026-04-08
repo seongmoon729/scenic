@@ -34,6 +34,6 @@ def get_config():
 
   config.num_training_steps = 30_000
   config.lr_configs.warmup_steps = 500
-  config.lr_configs.base_learning_rate = 0.0001
+  config.lr_configs.base_learning_rate = 0.0002
 
   return config
