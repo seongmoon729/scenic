@@ -632,10 +632,20 @@ def save_checkpoint(
   if jax.process_index() == 0:
     # Get train state from the first replica.
     checkpoint_state = jax.device_get(train_state)
+    # Convert global_step to Python scalar (handle JAX/NumPy arrays)
+    global_step = checkpoint_state.global_step
+    # If it's an array, take the first element (for replicated case)
+    if hasattr(global_step, 'shape') and len(global_step.shape) > 0:
+      global_step = global_step.flat[0]
+    # Convert to Python int
+    if hasattr(global_step, 'item'):
+      global_step = global_step.item()
+    else:
+      global_step = int(global_step)
     checkpoints.save_checkpoint(
         workdir,
         checkpoint_state,
-        int(checkpoint_state.global_step),
+        global_step,
         overwrite=overwrite,
         keep=max_to_keep,
         **kwargs,
