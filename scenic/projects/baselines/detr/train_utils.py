@@ -17,24 +17,24 @@
 import copy
 import json
 import os
-from typing import Any, Dict, Optional, Set
+import re
+from typing import Any, Dict, List, Mapping, Optional, Set, Union
 
 from absl import logging
+import flax
 from flax import core as flax_core
-from flax import optim as optimizers
 from flax import traverse_util
 import jax
-from jax.example_libraries import optimizers as experimental_optimizers
 import jax.numpy as jnp
 import numpy as np
+import optax
 import PIL
 import PIL.ImageDraw
 import PIL.ImageFont
 from scenic.common_lib import image_utils
 from scenic.dataset_lib.coco_dataset import coco_eval
 from scenic.model_lib.base_models import box_utils
-from scenic.train_lib_deprecated import optimizers as scenic_optimizers
-from scenic.train_lib_deprecated import train_utils
+from scenic.train_lib import train_utils
 import scipy.special
 import tensorflow as tf
 
@@ -323,71 +323,137 @@ def draw_boxes_side_by_side(pred: Dict[str, Any], batch: Dict[str, Any],
   return np.stack(viz, axis=0)
 
 
-def get_detr_optimizer(config):
-  """Makes a Flax MultiOptimizer for DETR."""
-  other_optim = scenic_optimizers.get_optimizer(config)
+def _make_adamw_tx(optimizer_config, learning_rate_fn):
+  """Builds an optax adamw from a legacy DETR optimizer config."""
+  opt_cfg = copy.deepcopy(optimizer_config).unlock()
+  return optax.adamw(
+      learning_rate=learning_rate_fn,
+      b1=opt_cfg.get('beta1', 0.9),
+      b2=opt_cfg.get('beta2', 0.999),
+      weight_decay=opt_cfg.get('weight_decay', 0.0),
+  )
+
+
+def get_detr_tx(config, learning_rate_fn, backbone_learning_rate_fn, params):
+  """Makes an optax GradientTransformation for DETR with per-group lr.
+
+  Backbone params (excluding BN affine) use backbone_learning_rate_fn; all
+  other params use learning_rate_fn.
+  """
+  other_tx = _make_adamw_tx(config.optimizer_configs, learning_rate_fn)
 
   if config.get('backbone_training'):
-    backbone_optim = scenic_optimizers.get_optimizer(config.backbone_training)
+    backbone_tx = _make_adamw_tx(
+        config.backbone_training.optimizer_configs, backbone_learning_rate_fn)
   else:
-    backbone_optim = other_optim
+    backbone_tx = other_tx
 
   def is_bn(path):
-    # For DETR we need to skip the BN affine transforms as well.
     names = ['/bn1/', '/bn2/', '/bn3/', '/init_bn/', '/proj_bn/']
-    for s in names:
-      if s in path:
-        return True
-    return False
-  backbone_traversal = optimizers.ModelParamTraversal(
-      lambda path, param: ('backbone' in path) and (not is_bn(path)))
-  other_traversal = optimizers.ModelParamTraversal(
-      lambda path, param: 'backbone' not in path)
+    return any(s in path for s in names)
 
-  return MultiOptimizerWithLogging((backbone_traversal, backbone_optim),
-                                   (other_traversal, other_optim))
+  flat_params = traverse_util.flatten_dict(
+      flax_core.unfreeze(params), keep_empty_nodes=True, sep='/')
 
+  def _label(path):
+    if 'backbone' in path and not is_bn(path):
+      return 'backbone'
+    return 'other'
 
-class MultiOptimizerWithLogging(optimizers.MultiOptimizer):
-  """Adds logging to MultiOptimizer to show which params are trained."""
+  flat_label_map = {k: _label(k) for k in flat_params}
+  label_map = flax_core.freeze(
+      traverse_util.unflatten_dict(flat_label_map, sep='/'))
 
-  def init_state(self, params):
-    self.log(params)
-    return super().init_state(params)
+  logging.info('DETR optimizer group assignments:')
+  for k, v in sorted(flat_label_map.items()):
+    logging.info('  [%s] %s', v, k)
 
-  def log(self, inputs):
-    for i, traversal in enumerate(self.traversals):
-      params = _get_params_dict(inputs)
-      flat_dict = traverse_util.flatten_dict(params)
-      for key, value in _sorted_items(flat_dict):
-        path = '/' + '/'.join(key)
-        if traversal._filter_fn(path, value):  # pylint: disable=protected-access
-          logging.info(
-              'ParamTraversalLogger (opt %d): %s, %s', i, value.shape, path)
-
-
-def _sorted_items(x):
-  """Returns items of a dict ordered by keys."""
-  return sorted(x.items(), key=lambda x: x[0])
-
-
-def _get_params_dict(inputs):
-  if isinstance(inputs, (dict, flax_core.FrozenDict)):
-    return flax_core.unfreeze(inputs)
-  else:
-    raise ValueError(
-        'Can only traverse a flax Model instance or a nested dict, not '
-        f'{type(inputs)}')
+  return optax.multi_transform(
+      {'backbone': backbone_tx, 'other': other_tx}, label_map)
 
 
 def clip_grads(grad_tree, max_norm):
   """Clip gradients stored as a pytree of arrays to maximum norm `max_norm`."""
-  # jax.example_libraries.optimizers.clip_grads implements this differently.
-  # First, it uses clip_coef of max_norm / norm without the 1e-6.
-  # Second, the jnp.where condition and argument order are reversed. This should
-  # normally be a no-change but we do not know what changes in XLA are triggered
-  # as a result of this and how that effects precision etc.
-  norm = experimental_optimizers.l2_norm(grad_tree)
+  norm = optax.global_norm(grad_tree)
   clip_coef = max_norm / (norm + 1e-6)
   normalize = lambda g: jnp.where(clip_coef < 1., g * clip_coef, g)
   return jax.tree_util.tree_map(normalize, grad_tree)
+
+
+# ---------------------------------------------------------------------------
+# Pretrain utilities (inlined to avoid big_vision dependency)
+# ---------------------------------------------------------------------------
+
+PyTree = Union[Mapping[str, Mapping], Any]
+
+
+def _replace_dict(model: PyTree,
+                  restored: PyTree,
+                  ckpt_prefix_path: Optional[List[str]] = None,
+                  model_prefix_path: Optional[List[str]] = None,
+                  name_mapping: Optional[Mapping[str, str]] = None,
+                  skip_regex: Optional[str] = None) -> PyTree:
+  """Replaces values in model dict with values from a checkpoint."""
+  name_mapping = name_mapping or {}
+  model = flax.core.unfreeze(model)
+  restored = flax.core.unfreeze(restored)
+
+  if ckpt_prefix_path:
+    for p in ckpt_prefix_path:
+      restored = restored[p]
+
+  if model_prefix_path:
+    for p in reversed(model_prefix_path):
+      restored = {p: restored}
+
+  restored_flat = flax.traverse_util.flatten_dict(
+      dict(restored), keep_empty_nodes=True)
+  model_flat = flax.traverse_util.flatten_dict(
+      dict(model), keep_empty_nodes=True)
+
+  for m_key, m_params in restored_flat.items():
+    for name, to_replace in name_mapping.items():
+      m_key = tuple(to_replace if k == name else k for k in m_key)
+    m_key_str = '/'.join(m_key)
+    if m_key not in model_flat:
+      logging.warning('%s in checkpoint not in model. Skip.', m_key_str)
+      continue
+    if skip_regex and re.findall(skip_regex, m_key_str):
+      logging.info('Skip loading parameter %s.', m_key_str)
+      continue
+    logging.info('Loading %s from checkpoint into model', m_key_str)
+    model_flat[m_key] = m_params
+
+  return flax.core.freeze(flax.traverse_util.unflatten_dict(model_flat))
+
+
+def init_from_pretrain_state(
+    train_state,
+    pretrain_state: PyTree,
+    ckpt_prefix_path: Optional[List[str]] = None,
+    model_prefix_path: Optional[List[str]] = None,
+    name_mapping: Optional[Mapping[str, str]] = None,
+    skip_regex: Optional[str] = None):
+  """Updates train_state.params with values from pretrain_state."""
+  restored_params = pretrain_state['params']
+  restored_model_state = pretrain_state.get('model_state', None)
+  model_params = _replace_dict(
+      train_state.params, restored_params,
+      ckpt_prefix_path, model_prefix_path, name_mapping, skip_regex)
+  train_state = train_state.replace(params=model_params)
+  if (restored_model_state is not None and
+      train_state.model_state is not None and train_state.model_state):
+    if model_prefix_path:
+      model_prefix_path = ['batch_stats'] + model_prefix_path
+      if 'batch_stats' in restored_model_state:
+        ckpt_prefix_path = (ckpt_prefix_path or [])
+        ckpt_prefix_path = ['batch_stats'] + ckpt_prefix_path
+    elif 'batch_stats' not in restored_model_state:
+      model_prefix_path = ['batch_stats']
+    if ckpt_prefix_path and ckpt_prefix_path[0] != 'batch_stats':
+      ckpt_prefix_path = ['batch_stats'] + ckpt_prefix_path
+    model_state = _replace_dict(
+        train_state.model_state, restored_model_state,
+        ckpt_prefix_path, model_prefix_path, name_mapping, skip_regex)
+    train_state = train_state.replace(model_state=model_state)
+  return train_state

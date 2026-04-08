@@ -32,10 +32,10 @@ import numpy as np
 from scenic.dataset_lib import dataset_utils
 
 
+import optax
 from scenic.projects.baselines.detr import train_utils as detr_train_utils
-from scenic.train_lib_deprecated import lr_schedules
-from scenic.train_lib_deprecated import pretrain_utils
-from scenic.train_lib_deprecated import train_utils
+from scenic.train_lib import lr_schedules
+from scenic.train_lib import train_utils
 
 
 def get_train_step(flax_model,
@@ -88,17 +88,13 @@ def get_train_step(flax_model,
     if max_grad_norm is not None:
       grad = detr_train_utils.clip_grads(grad, max_grad_norm)
 
-    (backbone_opt_hps,
-     opt_hps) = train_state.optimizer.optimizer_def.hyper_params
-    new_optimizer = train_state.optimizer.apply_gradient(
-        grad,
-        hyper_params=[
-            backbone_opt_hps.replace(learning_rate=backbone_lr),
-            opt_hps.replace(learning_rate=lr)
-        ])
+    updates, new_opt_state = train_state.tx.update(
+        grad, train_state.opt_state, train_state.params)
+    new_params = optax.apply_updates(train_state.params, updates)
     new_train_state = train_state.replace(
         global_step=step + 1,
-        optimizer=new_optimizer,
+        opt_state=new_opt_state,
+        params=new_params,
         model_state=new_model_state,
         rng=new_rng)
     return new_train_state, lr, backbone_lr
@@ -125,7 +121,7 @@ def get_train_step(flax_model,
       return loss, (new_model_state, metrics, predictions, new_rng)
 
     compute_gradient_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (_, aux), grad = compute_gradient_fn(train_state.optimizer.target)
+    (_, aux), grad = compute_gradient_fn(train_state.params)
     new_model_state, metrics, predictions, new_rng = aux
     new_train_state, lr, backbone_lr = update_fn(train_state, new_model_state,
                                                  grad, new_rng)
@@ -160,7 +156,7 @@ def get_eval_step(flax_model,
 
   def metrics_fn(train_state, batch, predictions):
     _, metrics = loss_and_metrics_fn(
-        predictions, batch, model_params=train_state.optimizer.target)
+        predictions, batch, model_params=train_state.params)
 
     if metrics_only:
       return None, None, metrics
@@ -192,7 +188,7 @@ def get_eval_step(flax_model,
 
   def eval_step(train_state, batch):
     variables = {
-        'params': train_state.optimizer.target,
+        'params': train_state.params,
         **train_state.model_state
     }
     predictions = flax_model.apply(
@@ -255,20 +251,29 @@ def train_and_evaluate(
        config=config,
        rngs=init_rng)
 
+  # Build learning rate functions first (needed for optimizer creation).
+  learning_rate_fn = lr_schedules.get_learning_rate_fn(config)
+  backbone_learning_rate_fn = None
+  if config.get('backbone_training'):
+    backbone_learning_rate_fn = lr_schedules.get_learning_rate_fn(
+        config.backbone_training)
+
   # Create optimizer.
   # We jit this, such that the arrays that are created are created on the same
   # device as the input is, in this case the CPU. Else they'd be on device[0]
-  optimizer = jax.jit(
-      detr_train_utils.get_detr_optimizer(config).create, backend='cpu')(
-          params)
+  tx = detr_train_utils.get_detr_tx(
+      config, learning_rate_fn,
+      backbone_learning_rate_fn or learning_rate_fn, params)
+  opt_state = jax.jit(tx.init, backend='cpu')(params)
 
   rng, train_rng = jax.random.split(rng)
   train_state = train_utils.TrainState(
       global_step=0,
-      optimizer=optimizer,
+      tx=tx,
+      opt_state=opt_state,
+      params=params,
       model_state=model_state,
-      rng=train_rng,
-      accum_train_time=0)
+      rng=train_rng)
   start_step = train_state.global_step
   if config.checkpoint:
     train_state, start_step = train_utils.restore_checkpoint(
@@ -279,7 +284,7 @@ def train_and_evaluate(
     init_checkpoint_path = config.init_from.get('checkpoint_path')
     restored_train_state = flax_restore_checkpoint(
         init_checkpoint_path, target=None)
-    train_state = pretrain_utils.init_from_pretrain_state(
+    train_state = detr_train_utils.init_from_pretrain_state(
         train_state,
         restored_train_state,
         ckpt_prefix_path=config.init_from.get('ckpt_prefix_path'),
@@ -294,9 +299,14 @@ def train_and_evaluate(
         'checkpoint_path')
     bb_train_state = flax_restore_checkpoint(bb_checkpoint_path, target=None)
 
-    model_prefix_path = ['backbone']
-    train_state = pretrain_utils.init_from_pretrain_state(
-        train_state, bb_train_state, model_prefix_path=model_prefix_path)
+    if bb_train_state is None:
+      logging.warning(
+          'Pretrained backbone checkpoint not found at %s, skipping.',
+          bb_checkpoint_path)
+    else:
+      model_prefix_path = ['backbone']
+      train_state = detr_train_utils.init_from_pretrain_state(
+          train_state, bb_train_state, model_prefix_path=model_prefix_path)
 
   update_model_state = not config.get('freeze_backbone_batch_stats', False)
   if not update_model_state:
@@ -311,12 +321,6 @@ def train_and_evaluate(
   # Calculate the total number of training steps.
   total_steps, steps_per_epoch = train_utils.get_num_training_steps(
       config, dataset.meta_data)
-  # Get learning rate scheduler.
-  learning_rate_fn = lr_schedules.get_learning_rate_fn(config)
-  backbone_learning_rate_fn = None
-  if config.get('backbone_training'):
-    backbone_learning_rate_fn = lr_schedules.get_learning_rate_fn(
-        config.backbone_training)
 
   train_step = get_train_step(
       flax_model=model.flax_model,
@@ -434,12 +438,12 @@ def train_and_evaluate(
   train_metrics, extra_training_logs = [], []
   train_summary, eval_summary = None, None
 
-  chrono = train_utils.Chrono(
+  chrono = train_utils.Chrono()
+  chrono.inform(
       first_step=start_step,
       total_steps=total_steps,
-      steps_per_epoch=steps_per_epoch,
       global_bs=config.batch_size,
-      accum_train_time=int(jax_utils.unreplicate(train_state.accum_train_time)))
+      steps_per_epoch=steps_per_epoch)
 
   logging.info('Starting training loop at step %d.', start_step + 1)
   report_progress = periodic_actions.ReportProgress(
@@ -509,7 +513,7 @@ def train_and_evaluate(
     if (step % log_summary_steps == 0) or (step == total_steps - 1):
       ############### LOG TRAIN SUMMARY ###############
       if lead_host:
-        chrono.tick(step, writer)
+        chrono.tick(step, writer, write_note=lambda x: None)
 
       # Write summary:
       train_summary = train_utils.log_train_summary(
@@ -553,7 +557,6 @@ def train_and_evaluate(
         # Sync model state across replicas.
         train_state = train_utils.sync_model_state_across_replicas(train_state)
         if lead_host:
-          train_state.replace(accum_train_time=chrono.accum_train_time)
           train_utils.save_checkpoint(workdir, train_state)
 
     chrono.resume()  # Un-pause now.

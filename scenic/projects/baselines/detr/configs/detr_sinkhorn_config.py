@@ -27,7 +27,7 @@ NUM_EPOCHS = 300
 def get_config():
   """Returns the configuration for COCO detection using DETR."""
   config = ml_collections.ConfigDict()
-  config.experiment_name = 'coco_detection_detr'
+  config.experiment_name = 'detr'
 
   # Dataset.
   config.dataset_name = 'coco_detr_detection'
