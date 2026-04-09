@@ -79,8 +79,8 @@ def get_config():
   config.lr_configs.learning_rate_schedule = 'compound'
   config.lr_configs.factors = 'constant * cosine_decay * linear_warmup'
   config.lr_configs.steps_per_cycle = config.num_training_steps
-  config.lr_configs.warmup_steps = 250
-  config.lr_configs.base_learning_rate = 0.0001
+  config.lr_configs.warmup_steps = 500
+  config.lr_configs.base_learning_rate = 2e-4
   config.shuffle_seed = 42
 
   # Pretrained_backbone.

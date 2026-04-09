@@ -32,8 +32,6 @@ def get_config():
   config.dataset_configs.cache = False
   config.dataset_configs.filter_labels = False
 
-  config.num_training_steps = 50_000
-  config.lr_configs.warmup_steps = 250
-  config.lr_configs.base_learning_rate = 0.0001
+  config.num_training_steps = 30_000
 
   return config
