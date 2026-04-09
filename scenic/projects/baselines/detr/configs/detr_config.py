@@ -18,6 +18,7 @@ r"""Default configs for COCO detection using DETR.
 """
 # pylint: enable=line-too-long
 
+import os
 import copy
 import ml_collections
 _COCO_TRAIN_SIZE = 118287
@@ -102,18 +103,18 @@ def get_config():
   config.pretrained_backbone_configs = ml_collections.ConfigDict()
   # Download pretrained ResNet50 checkpoints from here:
   # https://github.com/google-research/scenic/tree/main/scenic/projects/baselines pylint: disable=line-too-long
-  config.pretrained_backbone_configs.checkpoint_path = 'path_to_checkpoint_of_resnet_50'
+  config.pretrained_backbone_configs.checkpoint_path = f"gs://{os.getenv("GCS_BUCKET_NAME")}/scenic_checkpoints/tv_resnet50"
 
   # Logging.
   config.write_summary = True
   config.xprof = True  # Profile using xprof.
   config.log_summary_steps = 50  # train summary steps
   config.log_large_summary_steps = 1000  # Expensive summary operations freq
+  config.log_eval_steps = 2500  # eval every 2500 steps
   config.checkpoint = True  # Do checkpointing.
   config.checkpoint_steps = steps_per_epoch
   config.debug_train = False  # Debug mode during training.
   config.debug_eval = False  # Debug mode during eval.
 
   return config
-
 

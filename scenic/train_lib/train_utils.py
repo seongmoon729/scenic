@@ -630,18 +630,9 @@ def save_checkpoint(
     **kwargs: Passed on to flax.training.checkpoints.save_checkpoint.
   """
   if jax.process_index() == 0:
-    # Get train state from the first replica.
-    checkpoint_state = jax.device_get(train_state)
-    # Convert global_step to Python scalar (handle JAX/NumPy arrays)
-    global_step = checkpoint_state.global_step
-    # If it's an array, take the first element (for replicated case)
-    if hasattr(global_step, 'shape') and len(global_step.shape) > 0:
-      global_step = global_step.flat[0]
-    # Convert to Python int
-    if hasattr(global_step, 'item'):
-      global_step = global_step.item()
-    else:
-      global_step = int(global_step)
+    # Unreplicate and get train state from the first replica.
+    checkpoint_state = jax.device_get(jax_utils.unreplicate(train_state))
+    global_step = int(checkpoint_state.global_step)
     checkpoints.save_checkpoint(
         workdir,
         checkpoint_state,
@@ -713,7 +704,12 @@ def restore_checkpoint(
   train_state = checkpoints.restore_checkpoint(
       checkpoint_path, train_state, step
   )
-  return train_state, int(train_state.global_step)
+  global_step = train_state.global_step
+  if hasattr(global_step, 'ndim') and global_step.ndim > 0:
+    # Checkpoint was saved in replicated form; unreplicate to get a single copy.
+    train_state = jax_utils.unreplicate(train_state)
+    global_step = train_state.global_step
+  return train_state, int(global_step)
 
 
 def bind_rng_to_host_device(
