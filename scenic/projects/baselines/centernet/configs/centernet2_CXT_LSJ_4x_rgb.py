@@ -34,7 +34,4 @@ def get_config():
 
   config.num_training_steps = 30_000
 
-  # Disable checkpoints and artifacts
-  config.checkpoint_steps = None  # Disable checkpointing
-
   return config

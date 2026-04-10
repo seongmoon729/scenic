@@ -285,14 +285,14 @@ def train_and_evaluate(
       writer.flush()
 
     # Handle checkpointing
-    if ((step % checkpoint_steps == 0 and step > 0) or
-        (step == total_steps)):
-      with report_progress.timed('checkpoint'):
-        train_state = train_utils.sync_model_state_across_replicas(train_state)
-        if is_host:
-          unrep_train_state = jax_utils.unreplicate(train_state)
-          train_utils.save_checkpoint(workdir, unrep_train_state, max_to_keep=1)
-          del unrep_train_state
+    # if ((step % checkpoint_steps == 0 and step > 0) or
+    #     (step == total_steps)):
+    #   with report_progress.timed('checkpoint'):
+    #     train_state = train_utils.sync_model_state_across_replicas(train_state)
+    #     if is_host:
+    #       unrep_train_state = jax_utils.unreplicate(train_state)
+    #       train_utils.save_checkpoint(workdir, unrep_train_state, max_to_keep=1)
+    #       del unrep_train_state
     chrono.resume()  # Un-pause now.
 
   train_utils.barrier()
