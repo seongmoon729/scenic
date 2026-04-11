@@ -36,6 +36,7 @@ import optax
 from scenic.projects.baselines.detr import train_utils as detr_train_utils
 from scenic.train_lib import lr_schedules
 from scenic.train_lib import train_utils
+import wandb
 
 
 def get_train_step(flax_model,
@@ -234,6 +235,15 @@ def train_and_evaluate(
       regression testing.
   """
   lead_host = jax.process_index() == 0
+  run = None
+  if lead_host:
+    tags = []
+    if config.get('rawdiffusion_name'):
+      tags.append(config.rawdiffusion_name)
+    run = wandb.init(
+        project=config.experiment_name,
+        config=config.to_dict(),
+        tags=tags)
 
   # The pool is used to perform misc operations such as logging in async way.
   pool = futures.ThreadPoolExecutor(max_workers=2)
@@ -433,7 +443,8 @@ def train_and_evaluate(
   global_metrics_evaluator = None  # Only run eval on the lead_host node.
   if lead_host:
     global_metrics_evaluator = detr_train_utils.DetrGlobalEvaluator(
-        config.dataset_name)
+        config.dataset_name,
+        disable_output=config.get('coco_eval_disable_output', False))
 
   train_metrics, extra_training_logs = [], []
   train_summary, eval_summary = None, None
@@ -524,6 +535,11 @@ def train_and_evaluate(
               train_utils.unreplicate_and_get, extra_training_logs),
           writer=writer,
           metrics_normalizer_fn=metrics_normalizer_fn)
+      if lead_host:
+        run.log(
+            step=step,
+            data=train_summary,
+            commit=(step % log_eval_steps != 0))
       # Reset metric accumulation for next evaluation cycle.
       train_metrics, extra_training_logs = [], []
       #################################################
@@ -531,12 +547,17 @@ def train_and_evaluate(
     if (step % log_eval_steps == 0) or (step == total_steps):
       # First wait for the previous eval to finish & write summary.
       if last_eval_future is not None:
-        train_utils.log_eval_summary(
+        eval_summary = train_utils.log_eval_summary(
             step=last_eval_step,
             eval_metrics=last_eval_metrics,
             extra_eval_summary=last_eval_future.result(),
             writer=writer,
             metrics_normalizer_fn=metrics_normalizer_fn)
+        logging.info('Eval summary (eval_step=%d): %s', last_eval_step,
+                     eval_summary)
+        if lead_host:
+          # Eval runs asynchronously, so use the current train step for W&B.
+          run.log(step=step, data=eval_summary, commit=True)
         last_eval_future = None
 
       # Sync model state across replicas (in case of having model state, e.g.
@@ -564,11 +585,14 @@ def train_and_evaluate(
   # Wait until computations are done before exiting.
   pool.shutdown()
   if last_eval_future is not None:
-    train_utils.log_eval_summary(
+    eval_summary = train_utils.log_eval_summary(
         step=last_eval_step,
         eval_metrics=last_eval_metrics,
         extra_eval_summary=last_eval_future.result(),
         writer=writer,
         metrics_normalizer_fn=metrics_normalizer_fn)
+    logging.info('Eval summary (eval_step=%d): %s', last_eval_step, eval_summary)
+    if lead_host:
+      run.log(step=total_steps, data=eval_summary, commit=True)
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
   return train_state, train_summary, eval_summary
