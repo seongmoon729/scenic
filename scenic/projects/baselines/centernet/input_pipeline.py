@@ -262,11 +262,9 @@ def load_split_from_custom_tfrecord(
     data = tf.io.parse_single_example(
         serialized, custom_tfrecord_feature_description)
     example = custom_tfrecord_decode_example(data)
-    # Set static channel dim so downstream Python-level shape checks work
-    # correctly during TF graph tracing. Use the actual num_channels from the
-    # data rather than hardcoding 4 (which only works for RAW images).
-    example['image'] = tf.ensure_shape(
-        example['image'], [None, None, num_channels])
+    # Only assert spatial dims; channel dim is handled dynamically in
+    # decode_and_normalize so that both 3-ch RGB and 4-ch RAW records work.
+    example['image'] = tf.ensure_shape(example['image'], [None, None, None])
     return example
 
   ds = ds.map(parse_and_decode,
@@ -276,15 +274,19 @@ def load_split_from_custom_tfrecord(
     x = decode_fn(x, **kwargs)
     x['inputs'] = (x['inputs'] - pixel_min_val) / (pixel_max_val - pixel_min_val)
     x['inputs'] = tf.clip_by_value(x['inputs'], 0., 1.)
-    # Only do 4-channel RAW -> 3-channel conversion when the input actually
-    # has 4 channels (e.g. RGGB Bayer). For RGB data (already 3ch) skip this.
-    if x['inputs'].shape[-1] == 4 and num_channels == 3:
-      x['inputs'] = tf.stack(
-          [
-            x['inputs'][:, :, 0],
-            (x['inputs'][:, :, 1] + x['inputs'][:, :, 2]) / 2.0,
-            x['inputs'][:, :, 3],
-          ], axis=-1
+    # Dynamically convert 4-channel RAW -> 3-channel at runtime using tf.cond
+    # so that both RGB (3-ch) and RAW (4-ch) TFRecords are handled correctly.
+    if num_channels == 3:
+      actual_c = tf.shape(x['inputs'])[-1]
+      x['inputs'] = tf.cond(
+          tf.equal(actual_c, 4),
+          true_fn=lambda: tf.stack(
+              [
+                x['inputs'][:, :, 0],
+                (x['inputs'][:, :, 1] + x['inputs'][:, :, 2]) / 2.0,
+                x['inputs'][:, :, 3],
+              ], axis=-1),
+          false_fn=lambda: x['inputs'],
       )
     return x
 
