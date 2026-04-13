@@ -253,7 +253,7 @@ def train_and_evaluate(
       if is_host:
         run.log(
           step=step,
-          data=train_summary,
+          data={**train_summary, 'learning_rate': lr[0]},
           commit=(step % log_eval_steps != 0),
         )
       train_metrics, extra_training_logs = [], []
