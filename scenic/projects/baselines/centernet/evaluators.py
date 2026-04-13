@@ -110,6 +110,16 @@ class DetectionEvaluator(object):
       clear_annotations: Optional[bool] = True,
       eval_class_agnostic: bool = False) -> Dict[str, Any]:
     """Computes the metrics for all added predictions."""
+    if not self.coco_evaluator.annotations:
+      logging.warning('No predictions were generated. Returning zero metrics.')
+      results_dict = {k: 0.0 for k in [
+          'AP', 'AP50', 'AP75', 'APs', 'APm', 'APl',
+          'ARmax1', 'ARmax10', 'ARmax100', 'ARs', 'ARm', 'ARl',
+          'Recall50',
+      ]}
+      if clear_annotations:
+        self.coco_evaluator.clear_annotations()
+      return results_dict
     if eval_class_agnostic:
       default_id = self.coco_evaluator.coco.dataset['categories'][0]['id']
       for x in self.coco_evaluator.coco.dataset['annotations']:

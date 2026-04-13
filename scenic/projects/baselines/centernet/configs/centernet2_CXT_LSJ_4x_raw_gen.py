@@ -25,8 +25,5 @@ def get_config():
   """get config."""
   config = get_base_config()
   config.dataset_configs.train_data_path = 'gs://gyogyo906-us-central2/tmp/rawdiffusion-1775521320/tensorflow_datasets/train/*.tfrecord'
-  config.dataset_configs.pixel_min_val = 0.
-  config.dataset_configs.pixel_max_val = 1.
-
 
   return config

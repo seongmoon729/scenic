@@ -29,8 +29,4 @@ def get_config():
   config.dataset_configs.test_data_path = 'raw_od/nod_nikon'
   config.rawdiffusion_name = ''
 
-  # for custom tfrecords,
-  config.dataset_configs.pixel_min_val = 0.0
-  config.dataset_configs.pixel_max_val = 1.0
-
   return config
