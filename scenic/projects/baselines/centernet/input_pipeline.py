@@ -253,7 +253,10 @@ def load_split_from_custom_tfrecord(
   Returns:
     A tf.data.Dataset and a dict with dataset info.
   """
-  shard_files = sorted(tf.io.gfile.glob(tfrecord_pattern))
+  shard_files = []
+  for pattern in tfrecord_pattern.split(','):
+    shard_files.extend(tf.io.gfile.glob(pattern.strip()))
+  shard_files = sorted(shard_files)
   if not shard_files:
     raise ValueError(f'No TFRecord files found matching: {tfrecord_pattern}')
 
