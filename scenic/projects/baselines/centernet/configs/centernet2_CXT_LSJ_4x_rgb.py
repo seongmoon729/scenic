@@ -35,4 +35,6 @@ def get_config():
   config.num_training_steps = 30_000
   config.lr_configs.steps_per_cycle = config.num_training_steps
 
+  config.xprof = False
+
   return config
