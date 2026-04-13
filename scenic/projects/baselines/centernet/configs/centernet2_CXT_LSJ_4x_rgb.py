@@ -33,5 +33,6 @@ def get_config():
   config.dataset_configs.filter_labels = False
 
   config.num_training_steps = 30_000
+  config.lr_configs.steps_per_cycle = config.num_training_steps
 
   return config
