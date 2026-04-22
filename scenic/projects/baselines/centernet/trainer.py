@@ -16,13 +16,14 @@
 
 import functools
 import time
-from typing import Any
+from typing import Any, Optional
 
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
 from clu import platform
 from flax import jax_utils
+from flax import struct
 import flax.linen as nn
 from flax.training import checkpoints
 import jax
@@ -40,6 +41,12 @@ from scenic.train_lib import train_utils
 import wandb
 
 
+@struct.dataclass
+class EmaTrainState(train_utils.TrainState):
+  """TrainState extended with EMA parameter shadow."""
+  ema_params: Optional[Any] = struct.field(default_factory=dict)
+
+
 def train_step(
     train_state,
     batch,
@@ -47,6 +54,8 @@ def train_step(
     flax_model: nn.Module,
     loss_and_metrics_fn: Any,
     learning_rate_fn: Any,
+    ema_decay: float = 0.0,
+    ema_start_step: int = 0,
     debug: bool = False):
   """Run a single step of training.
 
@@ -57,6 +66,10 @@ def train_step(
     loss_and_metrics_fn: loss function.
     learning_rate_fn: Learning rate scheduler which given the global_step
       generates the learning rate.
+    ema_decay: exponential moving average decay for ema_params. If 0.0,
+      EMA is disabled and ema_params is left untouched.
+    ema_start_step: step index at which EMA accumulation begins. Before this
+      step ema_params tracks params directly (no smoothing).
     debug: enable debug mode or not.
   Returns:
     new_train_state: updated network parameters and optimizer states.
@@ -100,12 +113,23 @@ def train_step(
       grad, train_state.opt_state, train_state.params)
   new_params = optax.apply_updates(train_state.params, updates)
 
-  new_train_state = train_state.replace(
+  replace_kwargs = dict(
       global_step=step + 1,
       opt_state=new_opt_state,
       params=new_params,
       model_state=new_model_state,
-      rng=new_rng)
+      rng=new_rng,
+  )
+  if ema_decay > 0.0 and isinstance(train_state, EmaTrainState):
+    effective_decay = jnp.where(
+        step < ema_start_step, jnp.float32(0.0), jnp.float32(ema_decay))
+    new_ema_params = jax.tree_util.tree_map(
+        lambda ema, p: effective_decay * ema + (1.0 - effective_decay) * p,
+        train_state.ema_params,
+        new_params,
+    )
+    replace_kwargs['ema_params'] = new_ema_params
+  new_train_state = train_state.replace(**replace_kwargs)
   return new_train_state, lr, predictions, metrics
 
 
@@ -163,29 +187,65 @@ def train_and_evaluate(
   opt_state = tx.init(params)
 
   # Initialize "train_state" class, which contains all parameters.
+  ema_decay = float(config.get('ema_decay', 0.0))
+  use_ema = bool(config.get('use_ema', False))
   _, train_rng = jax.random.split(rng)
-  train_state = train_utils.TrainState(
-      global_step=0,
-      opt_state=opt_state,
-      tx=tx,
-      params=params,
-      model_state=model_state,
-      rng=train_rng)
+  if ema_decay > 0.0 or use_ema:
+    train_state = EmaTrainState(
+        global_step=0,
+        opt_state=opt_state,
+        tx=tx,
+        params=params,
+        model_state=model_state,
+        rng=train_rng,
+        ema_params=params)
+  else:
+    train_state = train_utils.TrainState(
+        global_step=0,
+        opt_state=opt_state,
+        tx=tx,
+        params=params,
+        model_state=model_state,
+        rng=train_rng)
 
   # Resume (interrupted) training from the same workdir
   train_state = checkpoints.restore_checkpoint(workdir, train_state)
+  # Backward compat: old checkpoints may restore into EmaTrainState without
+  # ema_params populated. Fallback to copying current params in that case.
+  if isinstance(train_state, EmaTrainState):
+    ema_params = train_state.ema_params
+    empty_ema = (
+        ema_params is None
+        or (isinstance(ema_params, dict) and len(ema_params) == 0)
+    )
+    if empty_ema:
+      train_state = train_state.replace(ema_params=train_state.params)
   start_step = int(train_state.global_step)
 
   # Load pretrained weights at the first step
   if start_step == 0:
     train_state, start_step = centernet_train_utils.load_weights(
         train_state, config)
+    # Keep EMA shadow in sync with loaded pretrained params.
+    if isinstance(train_state, EmaTrainState):
+      train_state = train_state.replace(ema_params=train_state.params)
     step0_log = {'num_trainable_params': num_trainable_params}
     if gflops:
       step0_log['gflops'] = gflops
     writer.write_scalars(1, step0_log)
   train_state = jax_utils.replicate(train_state)
   del params  # Do not keep a copy of the initial params.
+
+  # Determine total_steps early so EMA start-step default can depend on it.
+  total_steps, steps_per_epoch = train_utils.get_num_training_steps(
+      config, dataset.meta_data)
+  ema_start_step = int(config.get('ema_start_step', 0))
+  if ema_start_step <= 0:
+    ema_start_step = total_steps // 3
+  if ema_decay > 0.0:
+    logging.info(
+        'EMA enabled: decay=%.6f, start_step=%d (total_steps=%d)',
+        ema_decay, ema_start_step, total_steps)
 
   # Define the function for each train step, and make it run on devices (pmap).
   train_step_pmapped = jax.pmap(
@@ -194,14 +254,14 @@ def train_and_evaluate(
           flax_model=model.flax_model,
           loss_and_metrics_fn=model.loss_function,
           learning_rate_fn=lr_fn,
+          ema_decay=ema_decay,
+          ema_start_step=ema_start_step,
           debug=config.debug_train,
       ),
       axis_name='batch', donate_argnums=(0,),
   )
 
   # Define log options
-  total_steps, steps_per_epoch = train_utils.get_num_training_steps(
-      config, dataset.meta_data)
   log_eval_steps = config.get('log_eval_steps', steps_per_epoch)
   log_summary_steps = config.get('log_summary_steps', 20)
   checkpoint_steps = config.get('checkpoint_steps') or log_eval_steps
@@ -263,9 +323,12 @@ def train_and_evaluate(
       start_time = time.time()
       with report_progress.timed('eval'):
         train_state = train_utils.sync_model_state_across_replicas(train_state)
+        eval_state = train_state
+        if use_ema and isinstance(train_state, EmaTrainState):
+          eval_state = train_state.replace(params=train_state.ema_params)
         last_eval_results, last_eval_metrics = evaluate.inference_on_dataset(
             model.flax_model,
-            train_state, dataset,
+            eval_state, dataset,
             eval_batch_size=eval_batch_size,
             is_host=is_host,
             save_dir=workdir,

@@ -83,6 +83,12 @@ def get_config():
   config.lr_configs.base_learning_rate = 2e-4
   config.shuffle_seed = 42
 
+  # EMA (disabled by default; set ema_decay > 0 to enable).
+  # ema_start_step=0 falls back to num_training_steps // 3 at runtime.
+  config.ema_decay = 0.0
+  config.use_ema = False
+  config.ema_start_step = 0
+
   # Pretrained_backbone.
   config.load_prefix = 'backbone/bottom_up/'
   config.checkpoint_steps = 5000
